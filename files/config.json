@@ -1,0 +1,67 @@
+{
+    "exploits": [
+        {
+            "type": "wordpress",
+            "description": "WordPress Configuration Backup",
+            "file_path": "./files/wordpress.txt",
+            "validation_criteria": "DB_USER|DB_PASSWORD|table_prefix|wpengine_apikey|WPENGINE_ACCOUNT",
+            "save_as": "wordpress_backup.txt",
+            "response": "body"
+        },
+        {
+            "type": "env",
+            "description": "Environment Configuration",
+            "file_path": "./files/env.txt",
+            "validation_criteria": "APP_KEY",
+            "save_as": "env_config.txt",
+            "response": "body"
+        },
+        {
+            "type": "phpinfo",
+            "description": "PHP Info",
+            "file_path": "./files/phpinfo.txt",
+            "validation_criteria": "PHP Version",
+            "save_as": "phpinfo.txt",
+            "response": "body"
+        },
+        {
+            "type": "json",
+            "description": "JSON Configuration",
+            "file_path": "./files/json.txt",
+            "validation_criteria": "/json",
+            "save_as": "json_config.txt",
+            "response": "header"
+        },
+        {
+            "type": "javascript",
+            "description": "JavaScript Configuration",
+            "file_path": "./files/javascript.txt",
+            "validation_criteria": "/javascript",
+            "save_as": "javascript_config.txt",
+            "response": "header"
+        },
+        {
+            "type": "wordpress-lfi",
+            "description": "WordPress LFI",
+            "file_path": "./files/wordpress-lfi.txt",
+            "validation_criteria": "DB_USER|DB_PASSWORD|table_prefix|wpengine_apikey|WPENGINE_ACCOUNT",
+            "save_as": "wordpress_lfi.txt",
+            "response": "body"
+        }
+    ],
+    "configuration": {
+        "timeout": 7,
+        "request_headers": [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/91.0.864.41 Safari/537.36 Edg/91.0.864.41",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 OPR/77.0.4054.64",
+            "Mozilla/5.0 (Windows NT 10.0; WOW64; Trident/7.0; rv:11.0) like Gecko",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 YaBrowser/21.6.2.855 Yowser/2.5 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 BIDUBrowser/2.x Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Whale/2.10.122.42 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; WOW64; Trident/7.0; AS; rv:11.0) like Gecko",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 2345Explorer/10.7.0.20312 Safari/537.36"
+        ]
+    }
+}
