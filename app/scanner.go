@@ -1,86 +1,97 @@
 package app
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
 	"math/rand"
 	"net/http"
+	"os"
 	"regexp"
-	// "strings"
-	"time"
 )
 
-const (
-	Red    = "\033[31m"
-	Green  = "\033[32m"
-	Yellow = "\033[33m"
-	Reset  = "\033[0m"
-)
-
+// Scanner handles HTTP probing for a specific exploit.
 type Scanner struct {
 	client        *http.Client
 	exploit       Exploit
 	configuration Configuration
+	regex         *regexp.Regexp
+	writer        *ResultWriter
 }
 
-func NewScanner(c Configuration, e Exploit) *Scanner {
+// NewScanner creates a Scanner with a pre-compiled validation regex.
+func NewScanner(cfg Configuration, exploit Exploit, writer *ResultWriter) (*Scanner, error) {
+	re, err := regexp.Compile(exploit.ValidationCriteria)
+	if err != nil {
+		return nil, fmt.Errorf("compile validation regex: %w", err)
+	}
+
 	return &Scanner{
-		configuration: c,
-		exploit:       e,
 		client: &http.Client{
-			Timeout: time.Duration(c.Timeout) * time.Second,
+			Timeout: cfg.Timeout,
 			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: true,
-				},
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 			},
 		},
-	}
+		exploit:       exploit,
+		configuration: cfg,
+		regex:         re,
+		writer:        writer,
+	}, nil
 }
 
-func ColorPrint(color string, format string, a ...interface{}) {
-	fmt.Printf(color+format+Reset, a...)
-}
-
-func (s *Scanner) Scan(url string) {
-	defer func() {
-		if r := recover(); r != nil {
-			ColorPrint(Red, "Error: %v\n", r)
-		}
-	}()
-
-	req, err := http.NewRequest("GET", url, nil)
+// Scan performs a single HTTP request and validates the response.
+func (s *Scanner) Scan(ctx context.Context, target string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("build request: %w", err)
 	}
-	req.Header.Set("User-Agent", s.configuration.RequestHeaders[rand.Intn(len(s.configuration.RequestHeaders))])
+
+	headers := s.configuration.RequestHeaders
+	if len(headers) > 0 {
+		req.Header.Set("User-Agent", headers[rand.Intn(len(headers))])
+	}
+
 	resp, err := s.client.Do(req)
 	if err != nil {
-		panic(err)
-	}
-	var Data string
-	if s.exploit.Response == "body" {
-		byteData, err := io.ReadAll(resp.Body)
-		if err != nil {
-			panic(err)
-		}
-		Data = string(byteData)
-	}
-	if s.exploit.Response == "header" {
-		headerData := resp.Header.Get("Content-Type")
-		Data = headerData
+		return fmt.Errorf("do request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	match, err := regexp.MatchString(s.exploit.ValidationCriteria, Data)
-	if err != nil {
-		panic(err)
+	var data string
+	switch s.exploit.Response {
+	case "body":
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("read body: %w", err)
+		}
+		data = string(body)
+	case "header":
+		data = resp.Header.Get("Content-Type")
+	default:
+		// Fallback to body if response type is unrecognized.
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("read body: %w", err)
+		}
+		data = string(body)
 	}
-	if match {
-		ColorPrint(Green, "%s %s\n", url, s.exploit.Description)
-		WriteResult(fmt.Sprintf("results/%s", s.exploit.SaveAs), url)
+
+	if s.regex.MatchString(data) {
+		ColorPrint(Green, "%s %s\n", target, s.exploit.Description)
+		if s.writer != nil {
+			if err := s.writer.Write(target); err != nil {
+				fmt.Fprintf(os.Stderr, "[-] failed to write result: %v\n", err)
+			}
+		}
 	} else {
-		ColorPrint(Yellow, "%s %s\n", url, "Not Found")
+		ColorPrint(Yellow, "%s %s\n", target, "Not Found")
 	}
+	return nil
+}
+
+// ColorPrint formats and prints colored text to stdout.
+func ColorPrint(color string, format string, a ...interface{}) {
+	fmt.Printf(color+format+Reset, a...)
 }

@@ -2,13 +2,20 @@ package app
 
 import "fmt"
 
+const (
+	Red    = "\033[31m"
+	Green  = "\033[32m"
+	Yellow = "\033[33m"
+	Cyan   = "\033[36m"
+	Reset  = "\033[0m"
+)
+
 func DisplayBanner() {
-	fmt.Print(Red + `
-	█▀▀ █▀█ ▄▄ █░█░█ █▀▀ █▄▄` + Reset + Green + `
-	█▄█ █▄█ ░░ ▀▄▀▄▀ ██▄ █▄█` + Reset + Yellow + `
+	fmt.Println(Cyan + `
+   █▀▀ █▀█ ▄▄ █░█░█ █▀▀ █▄▄
+   █▄█ █▄█ ░░ ▀▄▀▄▀ ██▄ █▄█` + Green + `
 
-	█▀ █▀▀ ▄▀█ █▄░█ █▄░█ █▀▀ █▀█` + Reset + Green + `
-	▄█ █▄▄ █▀█ █░▀█ █░▀█ ██▄ █▀▄ V 1.0.0
-
-`)
+   █▀ █▀▀ ▄▀█ █▄░█ █▄░█ █▀▀ █▀█
+   ▄█ █▄▄ █▀█ █░▀█ █░▀█ ██▄ █▀▄` + Yellow + `  v2.0.0
+` + Reset)
 }

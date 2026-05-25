@@ -1,0 +1,16 @@
+# Binaries
+go-web-scanner
+*.exe
+*.out
+*.dll
+*.so
+*.dylib
+
+# Results
+results/
+*.txt
+!files/*.txt
+
+# IDE
+.idea/
+.vscode/

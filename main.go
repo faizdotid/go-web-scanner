@@ -2,116 +2,157 @@ package main
 
 import (
 	"bufio"
+	"context"
+	"flag"
 	"fmt"
 	"go-web-scanner/app"
 	"os"
-
-	// "runtime"
-	"strconv"
-	"strings"
 	"sync"
+	"time"
 )
 
-func checkResultsFolder() {
-	_, err := os.Stat("results")
-	if os.IsNotExist(err) {
-		os.Mkdir("results", 0755)
-	}
+type options struct {
+	configPath string
+	listFile   string
+	exploitIdx int
+	workers    int
+	outputDir  string
 }
 
-func readUserChoice(inputReader *bufio.Reader) int {
-	fmt.Print("\nChoice ? ")
-	userChoice, _ := inputReader.ReadString('\n')
-	userChoiceInt, err := strconv.Atoi(strings.TrimSpace(userChoice))
-	if err != nil {
-		panic(err)
-	}
-	return userChoiceInt
+func parseFlags() options {
+	var opts options
+	flag.StringVar(&opts.configPath, "config", "./files/config.json", "Path to config.json")
+	flag.StringVar(&opts.listFile, "list", "", "File containing target URLs")
+	flag.IntVar(&opts.exploitIdx, "exploit", 0, "Exploit index to run (1-based, 0 = list available exploits)")
+	flag.IntVar(&opts.workers, "workers", 20, "Number of concurrent workers")
+	flag.StringVar(&opts.outputDir, "output", "results", "Output directory for results")
+	flag.Parse()
+	return opts
 }
 
-func readListFile(inputReader *bufio.Reader) []string {
-	fmt.Print("List ? ")
-	listFileName, _ := inputReader.ReadString('\n')
-	listFileName = strings.TrimSpace(listFileName)
-	fileContent, err := os.ReadFile(listFileName)
+func loadTargets(path string) ([]string, error) {
+	f, err := os.Open(path)
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("open target file: %w", err)
 	}
-	urlList := strings.Split(string(fileContent), "\n")
-	return urlList
+	defer f.Close()
+
+	var targets []string
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		if u := app.NormalizeURL(scanner.Text()); u != "" {
+			targets = append(targets, u)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("read target file: %w", err)
+	}
+	return targets, nil
 }
 
-func readThreads(inputReader *bufio.Reader) int {
-	fmt.Print("Threads ? ")
-	threadInputStr, _ := inputReader.ReadString('\n')
-	threadInput, err := strconv.Atoi(strings.TrimSpace(threadInputStr))
-	if err != nil {
-		panic(err)
+func buildTasks(targets, paths []string) []string {
+	tasks := make([]string, 0, len(targets)*len(paths))
+	for _, target := range targets {
+		for _, path := range paths {
+			tasks = append(tasks, target+path)
+		}
 	}
-	return threadInput
+	return tasks
+}
+
+func run(opts options) error {
+	app.DisplayBanner()
+
+	cfg, err := app.LoadConfiguration(opts.configPath)
+	if err != nil {
+		return err
+	}
+
+	// List exploits if none selected.
+	if opts.exploitIdx == 0 {
+		fmt.Println("Available exploits:")
+		for i, e := range cfg.Exploits {
+			app.ColorPrint(app.Green, "  %d. %s\n", i+1, e.Description)
+		}
+		fmt.Println("\nUse -exploit <number> to select one.")
+		return nil
+	}
+
+	if opts.exploitIdx < 1 || opts.exploitIdx > len(cfg.Exploits) {
+		return fmt.Errorf("invalid exploit index: %d (available: 1-%d)", opts.exploitIdx, len(cfg.Exploits))
+	}
+
+	exploit := cfg.Exploits[opts.exploitIdx-1]
+	fmt.Printf("Selected: %s\n\n", exploit.Description)
+
+	if opts.listFile == "" {
+		return fmt.Errorf("-list flag is required")
+	}
+
+	targets, err := loadTargets(opts.listFile)
+	if err != nil {
+		return err
+	}
+	if len(targets) == 0 {
+		return fmt.Errorf("no valid targets found")
+	}
+
+	paths, err := app.LoadPaths(exploit.FilePath)
+	if err != nil {
+		return err
+	}
+	if len(paths) == 0 {
+		return fmt.Errorf("no paths loaded from %s", exploit.FilePath)
+	}
+
+	tasks := buildTasks(targets, paths)
+	fmt.Printf("Scanning %d tasks with %d workers\n\n", len(tasks), opts.workers)
+
+	writer, err := app.NewResultWriter(opts.outputDir, exploit.SaveAs)
+	if err != nil {
+		return err
+	}
+	defer writer.Close()
+
+	scanner, err := app.NewScanner(cfg.Configuration, exploit, writer)
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(len(tasks))*cfg.Configuration.Timeout+30*time.Second)
+	defer cancel()
+
+	jobs := make(chan string, opts.workers)
+	var wg sync.WaitGroup
+
+	// Start workers.
+	for i := 0; i < opts.workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for task := range jobs {
+				if err := scanner.Scan(ctx, task); err != nil {
+					app.ColorPrint(app.Red, "[-] %s error: %v\n", task, err)
+				}
+			}
+		}()
+	}
+
+	// Dispatch tasks.
+	for _, task := range tasks {
+		jobs <- task
+	}
+	close(jobs)
+
+	wg.Wait()
+	fmt.Printf("\nDone. Results saved to %s/%s\n", opts.outputDir, exploit.SaveAs)
+	return nil
 }
 
 func main() {
-	checkResultsFolder()
-
-	app.DisplayBanner()
-	inputReader := bufio.NewReader(os.Stdin)
-	Config, err := app.LoadConfiguration()
-	if err != nil {
-		panic(err)
+	opts := parseFlags()
+	if err := run(opts); err != nil {
+		app.ColorPrint(app.Red, "[-] %v\n", err)
+		os.Exit(1)
 	}
-
-	for index, config := range Config.Exploits {
-		app.ColorPrint(app.Green, "%d. Exploit Description: %s\n", index+1, config.Description)
-	}
-
-	userChoiceInt := readUserChoice(inputReader)
-	userChoiceConfig := Config.Exploits[userChoiceInt-1]
-
-	urlList := readListFile(inputReader)
-
-	threadInput := readThreads(inputReader)
-
-	paths, err := app.LoadFile(userChoiceConfig)
-	if err != nil {
-		panic(err)
-	}
-
-	threadChannel := make(chan struct{}, threadInput)
-
-	var tasks = make([]string, 0, len(urlList)*len(paths))
-	for _, url := range urlList {
-		for path := range paths {
-			// tasks = append(tasks, app.FilterUrl(url)+paths[path])
-			go func(url string, path string) {
-				tasks = append(tasks, app.FilterUrl(url)+path)
-			}(url, paths[path])
-		}
-	}
-
-	fmt.Printf("\nScanning %d tasks with %d threads\n\n", len(tasks), threadInput)
-
-	scanner := app.NewScanner(Config.Configuration, userChoiceConfig)
-
-	var wg sync.WaitGroup
-	for _, task := range tasks {
-		wg.Add(1)
-		go func(task string) {
-			threadChannel <- struct{}{}
-			scanner.Scan(task)
-			<-threadChannel
-			wg.Done()
-		}(task)
-	}
-	wg.Wait()
-	// runtime.GOMAXPROCS(threadInput)
-	// var wg sync.WaitGroup
-	// for _, task := range tasks {
-	// 	wg.Add(1)
-	// 	go func(task string) {
-	// 		scanner.Scan(task)
-	// 		wg.Done()
-	// 	}(task)
-	// }
-	// wg.Wait()
 }
