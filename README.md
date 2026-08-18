@@ -42,6 +42,7 @@ go build -o go-web-scanner main.go
 | `-exploit` | `0` | Exploit index to run (1-based) |
 | `-workers` | `20` | Number of concurrent workers |
 | `-output` | `results` | Output directory for findings |
+| `-insecure` | `false` | Skip TLS certificate verification |
 
 ## Configuration
 
@@ -51,7 +52,6 @@ Edit `files/config.json` to add or modify exploit modules:
 {
     "exploits": [
         {
-            "type": "wordpress",
             "description": "WordPress Configuration Backup",
             "file_path": "./files/wordpress.txt",
             "validation_criteria": "DB_USER|DB_PASSWORD|table_prefix",
@@ -61,7 +61,8 @@ Edit `files/config.json` to add or modify exploit modules:
     ],
     "configuration": {
         "timeout": 7,
-        "request_headers": ["Mozilla/5.0 ..."]
+        "headers": {},
+        "user_agents": ["Mozilla/5.0 ..."]
     }
 }
 ```
@@ -69,7 +70,7 @@ Edit `files/config.json` to add or modify exploit modules:
 ### Response types
 
 - `body` — Match against response body
-- `header` — Match against `Content-Type` header
+- `header` — Match against all response headers
 
 ## Disclaimer
 

@@ -7,8 +7,9 @@ import (
 	"fmt"
 	"go-web-scanner/app"
 	"os"
+	"os/signal"
 	"sync"
-	"time"
+	"syscall"
 )
 
 type options struct {
@@ -17,6 +18,7 @@ type options struct {
 	exploitIdx int
 	workers    int
 	outputDir  string
+	insecure   bool
 }
 
 func parseFlags() options {
@@ -26,6 +28,7 @@ func parseFlags() options {
 	flag.IntVar(&opts.exploitIdx, "exploit", 0, "Exploit index to run (1-based, 0 = list available exploits)")
 	flag.IntVar(&opts.workers, "workers", 20, "Number of concurrent workers")
 	flag.StringVar(&opts.outputDir, "output", "results", "Output directory for results")
+	flag.BoolVar(&opts.insecure, "insecure", false, "Skip TLS certificate verification")
 	flag.Parse()
 	return opts
 }
@@ -37,10 +40,15 @@ func loadTargets(path string) ([]string, error) {
 	}
 	defer f.Close()
 
+	seen := make(map[string]struct{})
 	var targets []string
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		if u := app.NormalizeURL(scanner.Text()); u != "" {
+			if _, ok := seen[u]; ok {
+				continue
+			}
+			seen[u] = struct{}{}
 			targets = append(targets, u)
 		}
 	}
@@ -114,13 +122,13 @@ func run(opts options) error {
 	}
 	defer writer.Close()
 
-	scanner, err := app.NewScanner(cfg.Configuration, exploit, writer)
+	scanner, err := app.NewScanner(cfg.Configuration, exploit, writer, opts.insecure)
 	if err != nil {
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(len(tasks))*cfg.Configuration.Timeout+30*time.Second)
-	defer cancel()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	jobs := make(chan string, opts.workers)
 	var wg sync.WaitGroup

@@ -4,7 +4,6 @@ import "time"
 
 // Exploit defines a scanning module loaded from config.json.
 type Exploit struct {
-	Type               string `json:"type"`
 	Description        string `json:"description"`
 	FilePath           string `json:"file_path"`
 	ValidationCriteria string `json:"validation_criteria"`
@@ -14,9 +13,10 @@ type Exploit struct {
 
 // Configuration holds global scanner settings.
 type Configuration struct {
-	Timeout        time.Duration `json:"-"`
-	TimeoutSeconds int           `json:"timeout"`
-	RequestHeaders []string      `json:"request_headers"`
+	Timeout        time.Duration     `json:"-"`
+	TimeoutSeconds int               `json:"timeout"`
+	UserAgents     []string          `json:"user_agents"`
+	Headers        map[string]string `json:"headers"`
 }
 
 // Config is the root configuration structure.

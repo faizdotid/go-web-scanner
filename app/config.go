@@ -64,6 +64,7 @@ type ResultWriter struct {
 	mu     sync.Mutex
 	writer *bufio.Writer
 	file   *os.File
+	count  int
 }
 
 // NewResultWriter creates a ResultWriter for the given output path.
@@ -84,12 +85,17 @@ func NewResultWriter(outputDir, filename string) (*ResultWriter, error) {
 	}, nil
 }
 
-// Write appends a line to the result file.
+// Write appends a line to the result file, flushing periodically.
 func (rw *ResultWriter) Write(line string) error {
 	rw.mu.Lock()
 	defer rw.mu.Unlock()
 	if _, err := fmt.Fprintln(rw.writer, line); err != nil {
 		return err
+	}
+	rw.count++
+	if rw.count >= 100 {
+		rw.count = 0
+		return rw.writer.Flush()
 	}
 	return nil
 }
